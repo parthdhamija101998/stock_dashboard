@@ -1,43 +1,28 @@
-name: Update Stock Analysis
-
 on:
+  repository_dispatch:
+    types: [add_ticker]  # This listens to the JS trigger
   schedule:
-    - cron: '0 */6 * * *' # Updates every 6 hours
-  workflow_dispatch: # Allows manual refresh via the Actions tab
-
-permissions:
-  contents: write
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      # ... (setup python steps same as before) ...
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip' # Speeds up future runs by reusing cached dependencies
-
-      - name: Install Dependencies
+      - name: Add Ticker to JSON
+        if: github.event.action == 'add_ticker'
         run: |
-          python -m pip install --upgrade pip
-          # --prefer-binary avoids long compile times for pandas/matplotlib
-          pip install --prefer-binary -r requirements.txt
-          pip install Jinja2 matplotlib 
+          # Use Python to append the new ticker to your JSON memory file
+          python -c "import json; t='${{ github.event.client_payload.ticker }}'; d=json.load(open('tickers.json')); d.append(t) if t not in d else None; json.dump(list(set(d)), open('tickers.json', 'w'))"
 
       - name: Run Analysis
-        run: |
-          python stock_analyzer.py
+        run: python stock_analyzer.py
 
-      - name: Commit and Push Results
+      - name: Commit Changes
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          # Ensure this matches the filename inside your stock_analyzer.py
-          git add index.html 
-          git commit -m "Update Styled Stock Results: $(date)" || exit 0
+          git config --global user.name "github-actions"
+          git add tickers.json data.js index.html
+          git commit -m "Updated stocks via JS trigger" || exit 0
           git push
