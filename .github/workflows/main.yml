@@ -20,13 +20,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip' # Speeds up future runs
+          cache: 'pip' # Speeds up future runs by reusing cached dependencies
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install Jinja2 matplotlib
+          # --prefer-binary avoids long compile times for pandas/matplotlib
+          pip install --prefer-binary -r requirements.txt
+          pip install Jinja2 matplotlib 
 
       - name: Run Analysis
         run: |
@@ -36,7 +37,7 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add stock_analysis_results.html
-          # The '|| exit 0' prevents the action from failing if no data changed
+          # Ensure this matches the filename inside your stock_analyzer.py
+          git add index.html 
           git commit -m "Update Styled Stock Results: $(date)" || exit 0
           git push
