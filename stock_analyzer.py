@@ -136,7 +136,7 @@ if not df_results.empty:
 </html>
 """
 
-    with open('stock_analysis_results.html', 'w') as f:
+    with open('index.html', 'w') as f:
         f.write(full_html)
 
-    print("stock_analysis_results.html created successfully.")
+    print("index.html created successfully.")
