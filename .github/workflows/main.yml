@@ -1,28 +1,28 @@
-on:
-  repository_dispatch:
-    types: [add_ticker]  # This listens to the JS trigger
-  schedule:
-    - cron: '0 */6 * * *'
-  workflow_dispatch:
+# on:
+#   repository_dispatch:
+#     types: [add_ticker]  # This listens to the JS trigger
+#   schedule:
+#     - cron: '0 */6 * * *'
+#   workflow_dispatch:
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      # ... (setup python steps same as before) ...
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     steps:
+#       # ... (setup python steps same as before) ...
 
-      - name: Add Ticker to JSON
-        if: github.event.action == 'add_ticker'
-        run: |
-          # Use Python to append the new ticker to your JSON memory file
-          python -c "import json; t='${{ github.event.client_payload.ticker }}'; d=json.load(open('tickers.json')); d.append(t) if t not in d else None; json.dump(list(set(d)), open('tickers.json', 'w'))"
+#       - name: Add Ticker to JSON
+#         if: github.event.action == 'add_ticker'
+#         run: |
+#           # Use Python to append the new ticker to your JSON memory file
+#           python -c "import json; t='${{ github.event.client_payload.ticker }}'; d=json.load(open('tickers.json')); d.append(t) if t not in d else None; json.dump(list(set(d)), open('tickers.json', 'w'))"
 
-      - name: Run Analysis
-        run: python stock_analyzer.py
+#       - name: Run Analysis
+#         run: python stock_analyzer.py
 
-      - name: Commit Changes
-        run: |
-          git config --global user.name "github-actions"
-          git add tickers.json data.js index.html
-          git commit -m "Updated stocks via JS trigger" || exit 0
-          git push
+#       - name: Commit Changes
+#         run: |
+#           git config --global user.name "github-actions"
+#           git add tickers.json data.js index.html
+#           git commit -m "Updated stocks via JS trigger" || exit 0
+#           git push
