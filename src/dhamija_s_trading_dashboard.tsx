@@ -270,7 +270,9 @@ export default function App() {
 
   const evaluatedStrategy = useMemo(() => {
     const base = tickerList[selectedStock];
-    if (!base) return {};
+    if (!base || typeof base.price !== 'number' || typeof base.low52 !== 'number') {
+    return { signal: "HOLD", reasoning: "Loading data..." };
+  }
 
     const currPrice = base.price;
     const sma200Level = base.low52 * 1.05; 
