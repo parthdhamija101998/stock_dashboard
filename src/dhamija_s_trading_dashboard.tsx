@@ -269,14 +269,12 @@ export default function App() {
   };
 
   const evaluatedStrategy = useMemo(() => {
-    const base = tickerList[selectedStock];
-    if (!base || typeof base.price !== 'number' || typeof base.low52 !== 'number') {
-    return { signal: "HOLD", reasoning: "Loading data..." };
-  }
+    const base = tickerList[selectedStock] as any; // Cast base to any
+    if (!base) return {};
 
-    const currPrice = base.price;
-    const sma200Level = base.low52 * 1.05; 
-    const sma50Level = base.low52 * 1.12;  
+    const currPrice = base.price as number;
+    const sma200Level = (base.low52 as number) * 1.05; 
+    const sma50Level = (base.low52 as number) * 1.12;
 
     // Boom Extension: ((Close - SMA200) / SMA200) * 100
     const boomExt = ((currPrice - sma200Level) / sma200Level) * 100;
