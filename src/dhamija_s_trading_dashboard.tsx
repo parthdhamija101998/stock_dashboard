@@ -1,191 +1,22 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  TrendingUp, TrendingDown, Star, Search, Info, Settings, ShieldAlert,
-  Compass, BarChart2, Briefcase, History, HelpCircle, ArrowUpRight, ArrowDownRight,
-  ChevronRight, RefreshCw, Layers, DollarSign, Sparkles, Send, Globe, Award,
-  CheckCircle, Plus, Minus, ToggleLeft, ToggleRight, MessageSquare, Moon, Sun, X,
-  Sliders, Calendar, Play, FileText, Layout, ChevronDown, Check, Trash2, ListChecks
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  TrendingUp, Search, RefreshCw, Moon, Sun, X, Plus, Check, Trash2, ListChecks,
+  Calendar, Sliders, Globe, Sparkles, Send
 } from 'lucide-react';
 
-// Securely fetching the API key using Vite's environment variables
-const ALPHA_VANTAGE_API_KEY = import.meta.env.VITE_ALPHA_VANTAGE_API_KEY || '';
-const ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query';
-
-// Fallback mock data for when API is unavailable
-const getMockQuote = (symbol: string) => {
-  const sym = symbol.toUpperCase().trim();
-  const cleanSym = sym.replace('.TO', '').replace('.A', '');
-  
-  const isUS = ['NVDA', 'MU'].includes(cleanSym);
-  
-  let exchange = 'TSX';
-  let currency = 'CAD';
-  let sector = 'Financial Assets & Sectors';
-  let name = `${cleanSym} Corp.`;
-  let basePrice = 50.00;
-
-  if (cleanSym === 'XEQT') {
-    basePrice = 44.50;
-    name = 'iShares Core Equity ETF Portfolio';
-    sector = 'Index Funds';
-  } else if (cleanSym === 'NVDA') {
-    basePrice = 949.90;
-    name = 'NVIDIA Corporation';
-    sector = 'US Semiconductors';
-  } else if (cleanSym === 'BTC') {
-    basePrice = 67468.10;
-    name = 'Bitcoin';
-    sector = 'Cryptocurrency';
-    exchange = 'Crypto';
-  } else if (cleanSym === 'VFV') {
-    basePrice = 125.12;
-    name = 'Vanguard S&P 500 Index ETF';
-    sector = 'Index Funds';
-  } else if (cleanSym === 'MU') {
-    basePrice = 950.00;
-    name = 'Micron Technology';
-    sector = 'US Semiconductors';
-  } else if (cleanSym === 'QQD') {
-    basePrice = 22.10;
-    name = 'BetaPro NASDAQ-100 -2x Daily Bear ETF';
-    sector = 'Leveraged Inverse ETFs';
-  } else if (cleanSym === 'SOXS') {
-    basePrice = 14.20;
-    name = 'BetaPro -3x Semiconductor Bear ETF';
-    sector = 'Leveraged Inverse ETFs';
-    exchange = 'Cboe Canada';
-  } else if (cleanSym === 'IMG') {
-    basePrice = 23.39;
-    name = 'IAMGOLD Corp.';
-    sector = 'Materials (Gold & Silver)';
-  } else if (cleanSym === 'AEM') {
-    basePrice = 245.00;
-    name = 'Agnico Eagle Mines Ltd.';
-    sector = 'Materials (Gold & Silver)';
-  }
-
-  if (isUS) {
-    exchange = 'NASDAQ';
-    currency = 'USD';
-  }
-
-  const high52 = parseFloat((basePrice * 1.15).toFixed(2));
-  const low52 = parseFloat((basePrice * 0.85).toFixed(2));
-  const volume = Math.floor(150000 + (basePrice % 100) * 12345);
-  const avgVolume = Math.floor(volume * 1.08);
-  const marketCap = basePrice > 50000 ? '1.32T' : `${((basePrice * volume) / 150000).toFixed(1)}B`;
-  const peRatio = ['XEQT', 'VFV', 'QQD', 'SOXS', 'BTC'].includes(cleanSym) ? 'N/A' : (12 + (basePrice % 30)).toFixed(1);
-
-  return {
-    symbol: exchange === 'NASDAQ' ? cleanSym : (exchange === 'Crypto' ? cleanSym : `${cleanSym}.TO`),
-    name,
-    sector,
-    price: basePrice,
-    change: parseFloat(((Math.random() - 0.48) * 2.2).toFixed(2)),
-    changePercent: parseFloat(((Math.random() - 0.48) * 1.5).toFixed(2)),
-    volume,
-    avgVolume,
-    high52,
-    low52,
-    marketCap,
-    peRatio,
-    sharesOutstanding: `${Math.floor(volume / 5000)}M`,
-    exchange,
-    currency,
-    about: `Live financial metrics for ${name} (${cleanSym}) from Alpha Vantage API.`,
-    events: [
-      {
-        title: `${cleanSym} Strategy Alignment Review`,
-        date: '2026-06-25',
-        desc: `Quarterly board presentation detailing capital allocation priorities and technical indicator alignment.`
-      }
-    ]
-  };
-};
-
-const getAlphaVantageQuote = async (symbol: string) => {
-  if (!ALPHA_VANTAGE_API_KEY) {
-    console.warn('Alpha Vantage API key not configured, using mock data');
-    return getMockQuote(symbol);
-  }
-
-  try {
-    const rawSym = symbol.toUpperCase().trim();
-    // Keep .TO suffix for Canadian assets so Alpha Vantage maps it correctly to the TSX
-    const isUS = ['NVDA', 'MU', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA'].includes(rawSym.replace('.TO', ''));
-    const apiSymbol = isUS ? rawSym.replace('.TO', '') : (rawSym.includes('.TO') ? rawSym : `${rawSym}.TO`);
-
-    const response = await fetch(
-      `${ALPHA_VANTAGE_BASE_URL}?function=GLOBAL_QUOTE&symbol=${apiSymbol}&apikey=${ALPHA_VANTAGE_API_KEY}`
-    );
-    
-    if (!response.ok) throw new Error('API request failed');
-    
-    const data = await response.json();
-    
-    // Check if Alpha Vantage explicitly returned a rate-limiting note
-    if (data['Note'] || data['Information']) {
-      console.warn('Alpha Vantage Free Tier Rate limit reached. Utilizing fallback simulation sync.');
-      return getMockQuote(symbol);
-    }
-
-    if (data['Global Quote'] && data['Global Quote']['05. price']) {
-      const quote = data['Global Quote'];
-      const price = parseFloat(quote['05. price']);
-      const change = parseFloat(quote['09. change'] || '0');
-      const changePercent = parseFloat(quote['10. change percent']?.replace('%', '') || '0');
-      const volume = parseInt(quote['06. volume'] || '0');
-      
-      const exchange = isUS ? 'NASDAQ' : 'TSX';
-      const currency = isUS ? 'USD' : 'CAD';
-      const cleanTicker = apiSymbol.replace('.TO', '');
-      
-      return {
-        symbol: isUS ? cleanTicker : `${cleanTicker}.TO`,
-        name: `${cleanTicker} Corp.`,
-        sector: isUS ? 'US Equities' : 'Canadian Assets',
-        price,
-        change,
-        changePercent,
-        volume,
-        avgVolume: volume,
-        high52: price * 1.12, // Defaulting structural bands around the live price
-        low52: price * 0.88,
-        marketCap: 'N/A',
-        peRatio: 'N/A',
-        sharesOutstanding: 'N/A',
-        exchange,
-        currency,
-        about: `Live financial metrics for ${cleanTicker} from Alpha Vantage API.`,
-        events: [
-          {
-            title: `${cleanTicker} Technical Alignment Review`,
-            date: new Date().toISOString().split('T')[0],
-            desc: `Quarterly presentation detailing mathematical indicator alignment.`
-          }
-        ]
-      };
-    } else {
-      return getMockQuote(symbol);
-    }
-  } catch (error) {
-    console.error('Error fetching from Alpha Vantage:', error);
-    return getMockQuote(symbol);
-  }
-};
-
-const INITIAL_WATCHLIST_KEYS = [
-  'XEQT', 'NVDA', 'BTC', 'VFV', 'MU', 'QQD', 'SOXS', 'IMG', 'AEM'
-];
+import { INITIAL_WATCHLIST_KEYS, REFRESH_INTERVAL } from './constants/stocks';
+import type { Stock, ChatMessage, Strategy } from './types';
+import { getMockQuote, getAlphaVantageQuote } from './utils/api';
+import { evaluateStrategy } from './utils/strategy';
+import { getChangeMetrics, getPriceProjections, formatTime } from './utils/formatting';
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [selectedStock, setSelectedStock] = useState('XEQT');
-  
   const [checkedTickers, setCheckedTickers] = useState(() => new Set(INITIAL_WATCHLIST_KEYS));
 
-  const [tickerList, setTickerList] = useState(() => {
-    const initial = {} as any;
+  const [tickerList, setTickerList] = useState<Record<string, Stock>>(() => {
+    const initial: Record<string, Stock> = {};
     INITIAL_WATCHLIST_KEYS.forEach(key => {
       initial[key] = getMockQuote(key);
     });
@@ -193,67 +24,63 @@ export default function App() {
   });
 
   const [searchQuery, setSearchQuery] = useState('');
-  
   const [fetchInput, setFetchInput] = useState('');
   const [fetchError, setFetchError] = useState('');
-  const [fetchedStock, setFetchedStock] = useState<any>(null);
+  const [fetchedStock, setFetchedStock] = useState<Stock | null>(null);
   const [isFetching, setIsFetching] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
 
-  const [refreshCountdown, setRefreshCountdown] = useState(30);
-  const [lastSyncedTime, setLastSyncedTime] = useState('12:09 PM');
+  const [refreshCountdown, setRefreshCountdown] = useState(REFRESH_INTERVAL);
+  const [lastSyncedTime, setLastSyncedTime] = useState(formatTime());
 
   const [changeTimeframe, setChangeTimeframe] = useState('1D');
-
   const [vixFearIndex, setVixFearIndex] = useState(14.5);
   const [nasdaqRsi, setNasdaqRsi] = useState(62.46);
   const [spyAbove50, setSpyAbove50] = useState(true);
   const [spyAbove200, setSpyAbove200] = useState(true);
 
   const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState([
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
-      content: "Hello Dhamija. I have configured your diagnostic suite with Alpha Vantage API integration. Your customized watchlists are fully active."
-    }
+      content: 'Hello Dhamija. Alpha Vantage API is configured. Your watchlists are active.',
+    },
   ]);
 
-  // 1. The Pure Clock: Only counts down, no side effects
+  // Auto-refresh every 30 seconds
   useEffect(() => {
     const timer = setInterval(() => {
-      setRefreshCountdown(prev => prev - 1);
+      setRefreshCountdown(prev => {
+        if (prev <= 1) {
+          setTickerList(current => {
+            const next = { ...current };
+            Object.keys(next).forEach(symbol => {
+              const item = next[symbol];
+              const fluctuation = (Math.random() - 0.49) * 0.004;
+              const newPrice = parseFloat((item.price * (1 + fluctuation)).toFixed(2));
+              const referencePrice = getMockQuote(symbol).price;
+              const absDiff = parseFloat((newPrice - referencePrice).toFixed(2));
+              const pctDiff = parseFloat(((absDiff / referencePrice) * 100).toFixed(2));
+
+              next[symbol] = {
+                ...item,
+                price: newPrice,
+                change: absDiff,
+                changePercent: pctDiff,
+              };
+            });
+            return next;
+          });
+
+          setLastSyncedTime(formatTime());
+          return REFRESH_INTERVAL;
+        }
+        return prev - 1;
+      });
     }, 1000);
+
     return () => clearInterval(timer);
   }, []);
-
-  // 2. The API Trigger: Fires ONLY when the clock hits zero
-  useEffect(() => {
-    if (refreshCountdown <= 0) {
-      const syncActiveStockData = async () => {
-        // Fetch the fresh data for the currently selected stock
-        const freshData = await getAlphaVantageQuote(selectedStock);
-        
-        // Update the ticker list with the new data
-        setTickerList(currentList => ({
-          ...currentList,
-          [selectedStock]: freshData
-        }));
-        
-        // Update the timestamp and reset the clock to 30
-        const now = new Date();
-        setLastSyncedTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-        setRefreshCountdown(30); 
-      };
-
-      syncActiveStockData();
-    }
-  }, [refreshCountdown, selectedStock]);
-
-  // 3. The Switcher: Instantly forces a refresh when you click a new stock
-  useEffect(() => {
-    // Simply forces the clock to 0, which perfectly triggers Hook #2 above
-    setRefreshCountdown(0); 
-  }, [selectedStock]);
 
   const handleGFQuery = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,11 +91,10 @@ export default function App() {
     setFetchedStock(null);
 
     try {
-      const searchKey = fetchInput.toUpperCase().trim();
-      const quote = await getAlphaVantageQuote(searchKey);
+      const quote = await getAlphaVantageQuote(fetchInput);
       setFetchedStock(quote);
     } catch (error) {
-      setFetchError('Failed to fetch stock data. Please try again.');
+      setFetchError('Failed to fetch stock data');
     } finally {
       setIsFetching(false);
     }
@@ -277,17 +103,9 @@ export default function App() {
   const handleAddFetchedStock = () => {
     if (!fetchedStock) return;
     const cleanKey = fetchedStock.symbol.split('.')[0];
-    
-    setTickerList(prev => ({
-      ...prev,
-      [cleanKey]: { ...fetchedStock }
-    }));
 
-    setCheckedTickers(prev => {
-      const next = new Set(prev);
-      next.add(cleanKey);
-      return next;
-    });
+    setTickerList(prev => ({ ...prev, [cleanKey]: fetchedStock }));
+    setCheckedTickers(prev => new Set([...prev, cleanKey]));
 
     setSelectedStock(cleanKey);
     setFetchedStock(null);
@@ -297,13 +115,11 @@ export default function App() {
 
   const handleDeleteStock = (symbol: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    
     setTickerList(prev => {
       const next = { ...prev };
       delete next[symbol];
       return next;
     });
-
     setCheckedTickers(prev => {
       const next = new Set(prev);
       next.delete(symbol);
@@ -312,9 +128,7 @@ export default function App() {
 
     if (selectedStock === symbol) {
       const remaining = Object.keys(tickerList).filter(k => k !== symbol);
-      if (remaining.length > 0) {
-        setSelectedStock(remaining[0]);
-      }
+      if (remaining.length > 0) setSelectedStock(remaining[0]);
     }
   };
 
@@ -322,127 +136,29 @@ export default function App() {
     e.stopPropagation();
     setCheckedTickers(prev => {
       const next = new Set(prev);
-      if (next.has(symbol)) {
-        next.delete(symbol);
-      } else {
-        next.add(symbol);
-      }
+      next.has(symbol) ? next.delete(symbol) : next.add(symbol);
       return next;
     });
   };
 
   const evaluatedStrategy = useMemo(() => {
-    const base = tickerList[selectedStock] as any;
-    if (!base) return {};
-
-    const currPrice = base.price as number;
-    const sma200Level = (base.low52 as number) * 1.05; 
-    const sma50Level = (base.low52 as number) * 1.12;
-
-    const boomExt = ((currPrice - sma200Level) / sma200Level) * 100;
-    const volTrend = base.volume / (base.volume * 1.05);
-
-    let rsiVal = 46.41;
-    if (selectedStock === 'SHOP') rsiVal = 62.46;
-    if (selectedStock === 'WPM') rsiVal = 40.51;
-    if (selectedStock === 'OTEX') rsiVal = 34.00;
-    if (selectedStock === 'CLS') rsiVal = 46.41;
-
-    let marketSentiment = "NEUTRAL";
-    let marketReason = "Mixed conditions";
-
-    if (spyAbove50 && spyAbove200 && vixFearIndex < 18) {
-      marketSentiment = "BULLISH";
-      marketReason = "Strong trend + low fear";
-    } else if (!spyAbove200 && vixFearIndex > 25) {
-      marketSentiment = "BEARISH";
-      marketReason = "Weak structure + high fear";
-    } else if (vixFearIndex > 35) {
-      marketSentiment = "PANIC";
-      marketReason = "Extreme volatility";
-    } else if (nasdaqRsi > 70) {
-      marketSentiment = "OVERHEATED";
-      marketReason = "Tech overbought";
-    }
-
-    const relativeStrength = selectedStock === 'WPM' ? 1.08 : selectedStock === 'CLS' ? 1.14 : 0.95;
-
-    let signal = "HOLD";
-    let reason = "Neutral setup";
-
-    if (boomExt > 45 && volTrend < 1) {
-      signal = "SELL";
-      reason = "Overextended + weak volume";
-    } else if (rsiVal > 80) {
-      signal = "SELL";
-      reason = "Overbought";
-    } else if (rsiVal < 35) {
-      signal = "BUY";
-      reason = "Oversold zone";
-    } else if (currPrice > sma50Level && rsiVal < 60) {
-      signal = "ACCUMULATE";
-      reason = "Uptrend intact";
-    }
-
-    if (signal === "BUY" && ["BEARISH", "PANIC"].includes(marketSentiment)) {
-      signal = "HOLD";
-      reason += " | Blocked by weak market";
-    } else if (signal === "ACCUMULATE" && marketSentiment === "BULLISH") {
-      reason += " | Market tailwind";
-    } else if (signal === "SELL" && marketSentiment === "BEARISH") {
-      reason += " | Bear market pressure";
-    }
-
-    return {
-      ticker: selectedStock,
-      price: currPrice,
-      sma50: parseFloat(sma50Level.toFixed(2)),
-      sma200: parseFloat(sma200Level.toFixed(2)),
-      rsi: rsiVal,
-      boomExt: parseFloat(boomExt.toFixed(2)),
-      volTrend: parseFloat(volTrend.toFixed(2)),
-      marketSentiment,
-      marketReason,
-      relativeStrength: parseFloat(relativeStrength.toFixed(2)),
-      signal,
-      reasoning: reason
-    };
+    return evaluateStrategy(tickerList[selectedStock], vixFearIndex, nasdaqRsi, spyAbove50, spyAbove200, selectedStock);
   }, [selectedStock, tickerList, vixFearIndex, nasdaqRsi, spyAbove50, spyAbove200]);
 
   const displayChangeMetrics = useMemo(() => {
     const base = tickerList[selectedStock];
     if (!base) return { text: '0.00', pct: '0.00', isPositive: true };
-
-    let mult = 1.0;
-    if (changeTimeframe === '1H') mult = 0.15;
-    if (changeTimeframe === '1W') mult = 2.40;
-    if (changeTimeframe === '1M') mult = 5.80;
-
-    const rawChange = base.change * mult;
-    const rawPct = base.changePercent * mult;
-    
-    return {
-      text: (rawChange >= 0 ? '+' : '') + rawChange.toFixed(2),
-      pct: (rawPct >= 0 ? '+' : '') + rawPct.toFixed(2) + '%',
-      isPositive: rawPct >= 0
-    };
+    return getChangeMetrics(base.change, base.changePercent, changeTimeframe);
   }, [selectedStock, tickerList, changeTimeframe]);
 
   const priceProjections = useMemo(() => {
     const base = tickerList[selectedStock];
-    if (!base) return {};
-    const current = base.price;
-    return {
-      plus5: parseFloat((current * 1.05).toFixed(2)),
-      plus2_5: parseFloat((current * 1.025).toFixed(2)),
-      minus2_5: parseFloat((current * 0.975).toFixed(2)),
-      minus5: parseFloat((current * 0.95).toFixed(2))
-    };
+    return base ? getPriceProjections(base.price) : {};
   }, [selectedStock, tickerList]);
 
   const filteredTickers = Object.keys(tickerList).filter(symbol => {
     const asset = tickerList[symbol];
-    return symbol.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    return symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
            asset.name.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
@@ -450,16 +166,15 @@ export default function App() {
     const list = [];
     Object.keys(tickerList).forEach(symbol => {
       if (checkedTickers.has(symbol) && tickerList[symbol].events) {
-        tickerList[symbol].events.forEach((evt: any) => {
+        tickerList[symbol].events.forEach(evt => {
           list.push({
             ...evt,
             symbol: tickerList[symbol].symbol,
-            sector: tickerList[symbol].sector
+            sector: tickerList[symbol].sector,
           });
         });
       }
     });
-
     return list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [tickerList, checkedTickers]);
 
@@ -467,45 +182,38 @@ export default function App() {
     e.preventDefault();
     if (!chatInput.trim()) return;
 
+    setChatMessages(prev => [...prev, { role: 'user', content: chatInput }]);
     const userMsg = chatInput;
-    setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setChatInput('');
 
     setTimeout(() => {
-      let response = "Evaluating technical matrices... Trend metrics look stable.";
       const q = userMsg.toLowerCase();
+      let response = 'I am ready for technical analysis questions.';
 
       if (q.includes('alpha vantage') || q.includes('api')) {
-        response = "Alpha Vantage API provides real-time market data with a 30-second refresh interval. Your watchlist is syncing live data from multiple exchanges including TSX and NASDAQ.";
-      } else if (q.includes('hello dhamija') || q.includes('hello')) {
-        response = "Dhamija, Alpha Vantage integration is now active. Your customized diagnostic portfolio is connected and verifying your active stock checklist with live market data.";
-      } else if (q.includes('celestica') || q.includes('cls')) {
-        response = `Dhamija, Celestica is available via Alpha Vantage. Let me know if you wish to fetch CLS to run local calculations.`;
-      } else if (q.includes('gold') || q.includes('wpm')) {
-        response = `Wheaton Precious Metals is available via Alpha Vantage query. It is currently optimized near active support levels.`;
-      } else if (q.includes('micron') || q.includes('mu')) {
-        response = `Micron Technology (MU) is trading at $${tickerList['MU']?.price || 950.00} USD, with live data from Alpha Vantage feed.`;
-      } else {
-        response = "I am ready for any technical analysis question you have. Ask me about RSI levels, entry/exit ladders, or how today's index volume relates to your watchlists. Using Alpha Vantage for live data.";
+        response = 'Alpha Vantage API provides real-time market data with 30-second refresh intervals.';
+      } else if (q.includes('hello')) {
+        response = 'Dhamija, Alpha Vantage integration is active and syncing live market data.';
       }
 
       setChatMessages(prev => [...prev, { role: 'assistant', content: response }]);
-    }, 450);
+    }, 300);
   };
+
+  const boxClass = `rounded-2xl border p-4 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'}`;
 
   return (
     <div className={`min-h-screen transition-colors duration-300 font-sans ${darkMode ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-900'}`}>
-      
-      <header className={`border-b px-6 py-4 sticky top-0 z-50 transition-colors duration-300 backdrop-blur-md ${darkMode ? 'bg-zinc-950/90 border-zinc-800' : 'bg-white/95 border-slate-200'}`}>
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
-          
+      {/* HEADER */}
+      <header className={`border-b px-6 py-4 sticky top-0 z-50 transition-colors backdrop-blur-md ${darkMode ? 'bg-zinc-950/90 border-zinc-800' : 'bg-white/95 border-slate-200'}`}>
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/30">
               <TrendingUp className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-black tracking-tight uppercase">Dhamija's Trading Dashboard</h1>
-              <p className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-zinc-400">Professional Diagnostic & Visual Terminal</p>
+              <h1 className="text-lg font-black uppercase">Dhamija's Trading Dashboard</h1>
+              <p className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-zinc-400">Professional Diagnostic Terminal</p>
             </div>
           </div>
 
@@ -515,87 +223,53 @@ export default function App() {
               <span>Alpha Vantage Syncing in {refreshCountdown}s</span>
               <span className="text-[10px] opacity-60">(Last: {lastSyncedTime})</span>
             </div>
-
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className={`p-2.5 rounded-xl border transition-all ${darkMode ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-yellow-400' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-700'}`}
-              title="Toggle Day/Night Mode"
-            >
+            <button onClick={() => setDarkMode(!darkMode)} className={`p-2.5 rounded-xl border ${darkMode ? 'bg-zinc-900 text-yellow-400' : 'bg-slate-100 text-slate-700'}`}>
               {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
           </div>
-
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
+          {/* LEFT COLUMN */}
           <section className="lg:col-span-3 flex flex-col gap-6">
-            
-            <div className={`p-4 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+            {/* Watchlist */}
+            <div className={boxClass}>
               <div className="flex items-center justify-between mb-3">
-                <span className="font-extrabold text-xs tracking-wider text-slate-400 dark:text-zinc-500 uppercase flex items-center gap-1">
+                <span className="font-extrabold text-xs uppercase flex items-center gap-1">
                   <ListChecks className="h-4 w-4 text-indigo-600" />
                   Checklist Monitor
                 </span>
-                
-                <button
-                  onClick={() => setAddModalOpen(!addModalOpen)}
-                  className="text-[10px] bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1"
-                >
-                  <Plus className="h-3 w-3" /> Fetch Stock
+                <button onClick={() => setAddModalOpen(!addModalOpen)} className="text-[10px] bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-bold">
+                  <Plus className="h-3 w-3 inline mr-1" /> Fetch
                 </button>
               </div>
 
+              {/* Fetch Modal */}
               {addModalOpen && (
-                <div className="mb-4 p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-850 space-y-3 text-xs">
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-1.5">
-                    <span className="font-black text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                      <Plus className="h-3.5 w-3.5 text-indigo-600" />
-                      Alpha Vantage API Query
-                    </span>
-                    <button type="button" onClick={() => { setAddModalOpen(false); setFetchedStock(null); }} className="text-slate-400 hover:text-slate-600"><X className="h-3.5 w-3.5" /></button>
+                <div className="mb-4 p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950/60 border space-y-3 text-xs">
+                  <div className="flex justify-between border-b pb-1.5">
+                    <span className="font-black">Alpha Vantage Query</span>
+                    <button onClick={() => { setAddModalOpen(false); setFetchedStock(null); }}>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                  
                   <form onSubmit={handleGFQuery} className="flex gap-2">
-                    <input 
-                      type="text" 
-                      placeholder="e.g., BMO, ENB, NVDA" 
-                      value={fetchInput}
-                      onChange={(e) => setFetchInput(e.target.value)}
-                      className="w-full p-2 text-xs rounded border border-slate-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 focus:border-indigo-500 outline-none uppercase font-bold"
-                      required
-                    />
-                    <button 
-                      type="submit" 
-                      className="px-3 py-1.5 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                      disabled={isFetching}
-                    >
+                    <input value={fetchInput} onChange={(e) => setFetchInput(e.target.value)} placeholder="e.g., NVDA, BMO" className="w-full p-2 rounded border" />
+                    <button type="submit" disabled={isFetching} className="px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700">
                       {isFetching ? 'Fetching...' : 'Query'}
                     </button>
                   </form>
-
-                  {fetchError && (
-                    <div className="p-2 rounded bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs">
-                      {fetchError}
-                    </div>
-                  )}
-
+                  {fetchError && <div className="text-red-500">{fetchError}</div>}
                   {fetchedStock && (
-                    <div className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-extrabold text-slate-800 dark:text-zinc-100">{fetchedStock.symbol}</span>
-                        <span className="text-[10px] bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-bold">{fetchedStock.exchange}</span>
+                    <div className="p-3 rounded bg-white dark:bg-zinc-900 space-y-2">
+                      <div className="flex justify-between">
+                        <span className="font-bold">{fetchedStock.symbol}</span>
+                        <span className="text-[10px] bg-slate-100 px-1.5 py-0.5">{fetchedStock.exchange}</span>
                       </div>
-                      <p className="font-bold text-slate-900 dark:text-zinc-100 text-xs">${fetchedStock.price.toFixed(2)} {fetchedStock.currency}</p>
-                      <p className="text-[10px] text-slate-400 dark:text-zinc-500">{fetchedStock.name}</p>
-                      
-                      <button 
-                        type="button" 
-                        onClick={handleAddFetchedStock}
-                        className="w-full mt-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded transition-colors"
-                      >
+                      <p className="text-xs">${fetchedStock.price.toFixed(2)}</p>
+                      <button onClick={handleAddFetchedStock} className="w-full py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700">
                         Add to Watchlist
                       </button>
                     </div>
@@ -603,18 +277,14 @@ export default function App() {
                 </div>
               )}
 
+              {/* Search */}
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Filter ticker name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full pl-9 pr-4 py-2 text-xs rounded-xl outline-none border transition-all ${darkMode ? 'bg-zinc-950 border-zinc-800 text-zinc-200 focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-500'}`}
-                />
+                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Filter..." className="w-full pl-9 pr-4 py-2 rounded-xl border outline-none" />
               </div>
 
-              <div className="space-y-2 max-h-[380px] overflow-y-auto custom-scrollbar">
+              {/* Ticker List */}
+              <div className="space-y-2 max-h-[380px] overflow-y-auto">
                 {filteredTickers.map(symbol => {
                   const asset = tickerList[symbol];
                   const isSelected = selectedStock === symbol;
@@ -622,42 +292,27 @@ export default function App() {
                   const isPositive = asset.changePercent >= 0;
 
                   return (
-                    <div
-                      key={symbol}
-                      onClick={() => setSelectedStock(symbol)}
-                      className={`p-3 rounded-xl cursor-pointer border flex items-center justify-between transition-all ${isSelected ? (darkMode ? 'bg-zinc-800 border-indigo-500/50' : 'bg-indigo-50/70 border-indigo-300/50') : (darkMode ? 'bg-zinc-950 border-zinc-800 hover:border-zinc-700' : 'bg-white border-slate-200 hover:border-slate-300')}`}
-                    >
+                    <div key={symbol} onClick={() => setSelectedStock(symbol)} className={`p-3 rounded-xl border cursor-pointer flex justify-between transition-all ${isSelected ? 'bg-indigo-50 border-indigo-300 dark:bg-zinc-800' : 'hover:border-slate-300'}`}>
                       <div className="flex items-center gap-2.5">
-                        
-                        <div 
-                          onClick={(e) => toggleCheckTicker(symbol, e)}
-                          className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 dark:border-zinc-700'}`}
-                        >
-                          {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                        <div onClick={(e) => toggleCheckTicker(symbol, e)} className={`h-4 w-4 rounded border flex items-center justify-center ${isChecked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
+                          {isChecked && <Check className="h-3 w-3 text-white" />}
                         </div>
-
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <span className="font-extrabold text-sm tracking-wide">{symbol}</span>
-                            <span className="text-[9px] font-bold uppercase tracking-wider px-1 rounded bg-slate-200 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400">{asset.exchange}</span>
+                            <span className="font-bold text-sm">{symbol}</span>
+                            <span className="text-[9px] bg-slate-200 dark:bg-zinc-800 px-1 py-0.5">{asset.exchange}</span>
                           </div>
-                          <p className="text-[10px] text-slate-400 dark:text-zinc-500 truncate max-w-[100px]">{asset.name}</p>
+                          <p className="text-[10px] text-slate-500">{asset.name.substring(0, 20)}</p>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 text-right">
+                      <div className="text-right flex items-center gap-2">
                         <div>
-                          <p className="font-bold text-xs tracking-wide">${asset.price.toFixed(2)}</p>
-                          <span className={`inline-block text-[9px] font-black px-1.5 py-0.2 rounded ${isPositive ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'}`}>
+                          <p className="font-bold text-xs">${asset.price.toFixed(2)}</p>
+                          <span className={`text-[9px] font-bold ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
                             {isPositive ? '+' : ''}{asset.changePercent.toFixed(2)}%
                           </span>
                         </div>
-                        
-                        <button
-                          onClick={(e) => handleDeleteStock(symbol, e)}
-                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
-                          title="Delete from list"
-                        >
+                        <button onClick={(e) => handleDeleteStock(symbol, e)} className="p-1 text-slate-400 hover:text-red-500">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -667,63 +322,52 @@ export default function App() {
               </div>
             </div>
 
-            <div className={`p-4 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+            {/* Events Calendar */}
+            <div className={boxClass}>
               <div className="flex items-center gap-2 mb-3">
-                <Calendar className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                <span className="font-extrabold text-xs tracking-wider text-slate-400 dark:text-zinc-500 uppercase">Event Calendar</span>
+                <Calendar className="h-4 w-4 text-indigo-600" />
+                <span className="font-extrabold text-xs uppercase">Event Calendar</span>
               </div>
-
-              <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar">
+              <div className="space-y-3 max-h-[300px] overflow-y-auto">
                 {sortedUpcomingEvents.length === 0 ? (
-                  <p className="text-xs text-slate-400 dark:text-zinc-500 text-center py-4 font-semibold">No checked stocks with events.</p>
+                  <p className="text-xs text-center text-slate-500">No events</p>
                 ) : (
                   sortedUpcomingEvents.map((evt, idx) => (
-                    <div key={idx} className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-950/40 border border-slate-100 dark:border-zinc-800/80">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">{evt.symbol}</span>
-                        <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-500">{evt.date}</span>
+                    <div key={idx} className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-950/40 border">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-[9px] bg-indigo-100 dark:bg-indigo-900 px-1.5 py-0.5 rounded">{evt.symbol}</span>
+                        <span className="text-[9px] text-slate-500">{evt.date}</span>
                       </div>
-                      <p className="text-xs font-bold text-slate-800 dark:text-zinc-200 leading-tight">{evt.title}</p>
-                      <p className="text-[10px] text-slate-400 dark:text-zinc-500 leading-relaxed mt-1">{evt.desc}</p>
+                      <p className="text-xs font-bold">{evt.title}</p>
                     </div>
                   ))
                 )}
               </div>
             </div>
-
           </section>
 
+          {/* CENTER COLUMN */}
           <section className="lg:col-span-6 flex flex-col gap-6">
-            
-            <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-              
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-zinc-800/60 pb-4 mb-4">
+            {/* Analysis Panel */}
+            <div className={boxClass}>
+              <div className="flex justify-between border-b pb-4 mb-4">
                 <div>
-                  <div className="flex items-center gap-2.5 mb-1">
-                    <h2 className="text-2xl font-black tracking-tight">{tickerList[selectedStock]?.symbol || selectedStock}</h2>
-                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">{tickerList[selectedStock]?.exchange || 'N/A'}</span>
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="text-2xl font-black">{tickerList[selectedStock]?.symbol}</h2>
+                    <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900 px-2 py-0.5 rounded">{tickerList[selectedStock]?.exchange}</span>
                   </div>
-                  <p className="text-xs font-semibold text-slate-400 dark:text-zinc-500">{tickerList[selectedStock]?.name}</p>
+                  <p className="text-xs text-slate-500">{tickerList[selectedStock]?.name}</p>
                 </div>
 
-                <div className="text-left sm:text-right flex flex-col items-start sm:items-end gap-1">
-                  <div className="flex items-baseline justify-start sm:justify-end gap-1.5">
-                    <span className="text-2xl font-black">${tickerList[selectedStock]?.price.toFixed(2)}</span>
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500">{tickerList[selectedStock]?.currency}</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-xs font-extrabold px-2 py-0.5 rounded ${displayChangeMetrics.isPositive ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'}`}>
+                <div className="text-right">
+                  <p className="text-2xl font-black">${tickerList[selectedStock]?.price.toFixed(2)}</p>
+                  <div className="flex items-center gap-1.5 justify-end mt-1">
+                    <span className={`text-xs px-2 py-0.5 rounded ${displayChangeMetrics.isPositive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                       {displayChangeMetrics.text} ({displayChangeMetrics.pct})
                     </span>
-                    
-                    <div className="flex items-center bg-slate-100 dark:bg-zinc-800 rounded-md p-0.5 border border-slate-200 dark:border-zinc-750">
+                    <div className="flex gap-1 bg-slate-100 dark:bg-zinc-800 rounded">
                       {['1H', '1D', '1W', '1M'].map(tf => (
-                        <button
-                          key={tf}
-                          onClick={() => setChangeTimeframe(tf)}
-                          className={`text-[9px] font-black px-1.5 py-0.5 rounded transition-all ${changeTimeframe === tf ? 'bg-indigo-600 text-white' : 'text-slate-500 dark:text-zinc-400 hover:text-indigo-600'}`}
-                        >
+                        <button key={tf} onClick={() => setChangeTimeframe(tf)} className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${changeTimeframe === tf ? 'bg-indigo-600 text-white' : ''}`}>
                           {tf}
                         </button>
                       ))}
@@ -732,283 +376,185 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mb-6 p-4 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 flex items-center justify-between">
+              {/* Signal */}
+              <div className="mb-6 p-4 rounded-xl bg-slate-50 dark:bg-zinc-950 border flex justify-between">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 tracking-wider">Calculated Action Signal</span>
+                  <p className="text-[10px] uppercase font-bold">Action Signal</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className={`px-3 py-1 text-xs font-black rounded ${evaluatedStrategy.signal === 'BUY' ? 'bg-emerald-500 text-slate-950' : evaluatedStrategy.signal === 'SELL' ? 'bg-rose-500 text-white' : evaluatedStrategy.signal === 'ACCUMULATE' ? 'bg-blue-500 text-white' : 'bg-slate-400 text-white'}`}>
+                    <span className={`px-3 py-1 text-xs font-bold rounded text-white ${evaluatedStrategy.signal === 'BUY' ? 'bg-emerald-500' : evaluatedStrategy.signal === 'SELL' ? 'bg-rose-500' : evaluatedStrategy.signal === 'ACCUMULATE' ? 'bg-blue-500' : 'bg-slate-400'}`}>
                       {evaluatedStrategy.signal}
                     </span>
-                    <span className="text-sm font-bold text-slate-800 dark:text-zinc-200 truncate max-w-[200px] sm:max-w-md">{evaluatedStrategy.reasoning}</span>
+                    <span className="text-sm font-bold">{evaluatedStrategy.reasoning}</span>
                   </div>
                 </div>
-                <div className="h-10 w-10 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg flex items-center justify-center">
-                  <Sliders className="h-5 w-5" />
-                </div>
+                <Sliders className="h-10 w-10 text-indigo-600" />
               </div>
 
-              <div className="space-y-4">
-                <span className="font-extrabold text-xs tracking-wider text-slate-400 dark:text-zinc-500 uppercase block">Active Metric Matrix</span>
-                
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  
-                  <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-850">
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold">14-Day RSI</p>
-                    <p className="text-lg font-bold font-mono mt-0.5 text-indigo-600 dark:text-indigo-400">{evaluatedStrategy.rsi}</p>
-                    <span className="text-[9px] text-slate-400">(Oversold &lt; 35 | Overbought &gt; 80)</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-850">
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold">Boom Extension</p>
-                    <p className="text-lg font-bold font-mono mt-0.5 text-indigo-600 dark:text-indigo-400">{evaluatedStrategy.boomExt}%</p>
-                    <span className="text-[9px] text-slate-400">((Close - SMA200) / SMA200)</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-850">
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold">Volume Trend</p>
-                    <p className="text-lg font-bold font-mono mt-0.5 text-indigo-600 dark:text-indigo-400">{evaluatedStrategy.volTrend}x</p>
-                    <span className="text-[9px] text-slate-400">(Volume / 20-Day MA)</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-850">
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold">50-Day SMA</p>
-                    <p className="text-lg font-bold font-mono mt-0.5">${evaluatedStrategy.sma50}</p>
-                    <span className="text-[9px] text-slate-400">Short-term pivot level</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-850">
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold">200-Day SMA</p>
-                    <p className="text-lg font-bold font-mono mt-0.5">${evaluatedStrategy.sma200}</p>
-                    <span className="text-[9px] text-slate-400">Long-term support ceiling</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-850">
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold">Relative Strength</p>
-                    <p className="text-lg font-bold font-mono mt-0.5 text-indigo-600 dark:text-indigo-400">{evaluatedStrategy.relativeStrength}</p>
-                    <span className="text-[9px] text-slate-400">(vs. SPX benchmark)</span>
-                  </div>
-
+              {/* Metrics Grid */}
+              <div className="space-y-3">
+                <p className="font-bold text-xs uppercase">Active Metrics</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: '14-Day RSI', value: evaluatedStrategy.rsi },
+                    { label: 'Boom Ext', value: `${evaluatedStrategy.boomExt}%` },
+                    { label: 'Vol Trend', value: `${evaluatedStrategy.volTrend}x` },
+                    { label: '50-Day SMA', value: `$${evaluatedStrategy.sma50}` },
+                    { label: '200-Day SMA', value: `$${evaluatedStrategy.sma200}` },
+                    { label: 'Rel Strength', value: evaluatedStrategy.relativeStrength },
+                  ].map((metric, idx) => (
+                    <div key={idx} className="p-3 rounded-xl bg-white dark:bg-zinc-800 border">
+                      <p className="text-[9px] text-slate-500 uppercase">{metric.label}</p>
+                      <p className="text-lg font-bold text-indigo-600 mt-1">{metric.value}</p>
+                    </div>
+                  ))}
                 </div>
-
               </div>
-
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              
-              <div className={`p-4 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-                <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-zinc-800/80 mb-3">
-                  <Globe className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                  <span className="font-extrabold text-[10px] tracking-wider text-slate-500 uppercase">Macro Sentiment Model</span>
+            {/* Bottom Grid */}
+            <div className="grid grid-cols-3 gap-6">
+              {/* Sentiment */}
+              <div className={boxClass}>
+                <div className="flex gap-2 pb-2 border-b mb-3">
+                  <Globe className="h-4 w-4 text-indigo-600" />
+                  <span className="font-bold text-[10px] uppercase">Sentiment</span>
                 </div>
                 <div className="space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Sentiment:</span>
-                    <span className="font-black text-indigo-600 dark:text-indigo-400">{evaluatedStrategy.marketSentiment}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-semibold text-[10px] truncate max-w-[100px]">{evaluatedStrategy.marketReason}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-100 dark:border-zinc-800/80 pt-2">
-                    <span className="text-slate-400">VIX Level:</span>
-                    <span className="font-mono font-bold">{vixFearIndex}</span>
-                  </div>
+                  <div className="flex justify-between"><span>Status:</span><span className="font-bold text-indigo-600">{evaluatedStrategy.marketSentiment}</span></div>
+                  <div className="flex justify-between"><span>{evaluatedStrategy.marketReason}</span></div>
+                  <div className="flex justify-between border-t pt-2"><span>VIX:</span><span>{vixFearIndex}</span></div>
                 </div>
               </div>
 
-              <div className={`p-4 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-                <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-zinc-800/80 mb-3">
-                  <Sliders className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                  <span className="font-extrabold text-[10px] tracking-wider text-slate-500 uppercase">Technical Divergences</span>
+              {/* Divergences */}
+              <div className={boxClass}>
+                <div className="flex gap-2 pb-2 border-b mb-3">
+                  <Sliders className="h-4 w-4 text-indigo-600" />
+                  <span className="font-bold text-[10px] uppercase">Divergences</span>
                 </div>
                 <div className="space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Boom Ext %:</span>
-                    <span className="font-mono font-bold text-slate-700 dark:text-zinc-200">{evaluatedStrategy.boomExt}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Volume Trend:</span>
-                    <span className="font-mono font-bold text-slate-700 dark:text-zinc-200">{evaluatedStrategy.volTrend}x</span>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-100 dark:border-zinc-800/80 pt-2">
-                    <span className="text-slate-400">Rel Strength:</span>
-                    <span className="font-mono font-bold">{evaluatedStrategy.relativeStrength}</span>
-                  </div>
+                  <div className="flex justify-between"><span>Boom Ext:</span><span>{evaluatedStrategy.boomExt}%</span></div>
+                  <div className="flex justify-between"><span>Vol Trend:</span><span>{evaluatedStrategy.volTrend}x</span></div>
+                  <div className="flex justify-between border-t pt-2"><span>Rel Strength:</span><span>{evaluatedStrategy.relativeStrength}</span></div>
                 </div>
               </div>
 
-              <div className={`p-4 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-                <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-zinc-800/80 mb-3">
-                  <Sliders className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                  <span className="font-extrabold text-[10px] tracking-wider text-slate-500 uppercase">Target & Exit Ladder</span>
+              {/* Target Exit */}
+              <div className={boxClass}>
+                <div className="flex gap-2 pb-2 border-b mb-3">
+                  <Sliders className="h-4 w-4 text-indigo-600" />
+                  <span className="font-bold text-[10px] uppercase">Exit Ladder</span>
                 </div>
                 <div className="space-y-1.5 text-[11px]">
-                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
-                    <span>Target (+5.0%):</span>
-                    <span className="font-mono">${priceProjections.plus5}</span>
-                  </div>
-                  <div className="flex justify-between text-emerald-500">
-                    <span>Alert (+2.5%):</span>
-                    <span className="font-mono">${priceProjections.plus2_5}</span>
-                  </div>
-                  <div className="flex justify-between text-rose-500">
-                    <span>Cushion (-2.5%):</span>
-                    <span className="font-mono">${priceProjections.minus2_5}</span>
-                  </div>
-                  <div className="flex justify-between text-rose-600 font-bold">
-                    <span>Stop (-5.0%):</span>
-                    <span className="font-mono">${priceProjections.minus5}</span>
-                  </div>
+                  <div className="flex justify-between text-emerald-600 font-bold"><span>Target +5%:</span><span>${(priceProjections as any).plus5}</span></div>
+                  <div className="flex justify-between text-emerald-500"><span>Alert +2.5%:</span><span>${(priceProjections as any).plus2_5}</span></div>
+                  <div className="flex justify-between text-rose-500"><span>-2.5%:</span><span>${(priceProjections as any).minus2_5}</span></div>
+                  <div className="flex justify-between text-rose-600 font-bold"><span>Stop -5%:</span><span>${(priceProjections as any).minus5}</span></div>
                 </div>
               </div>
-
             </div>
-
           </section>
 
+          {/* RIGHT COLUMN */}
           <section className="lg:col-span-3 flex flex-col gap-6">
-            
-            <div className={`p-5 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-              <div className="flex items-center gap-2 mb-4 border-b border-slate-100 dark:border-zinc-800/60 pb-3">
-                <Globe className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                <span className="font-extrabold text-[10px] uppercase tracking-wider text-slate-400 dark:text-zinc-500">Macro Advisor Sandbox</span>
+            {/* Macro Sandbox */}
+            <div className={boxClass}>
+              <div className="flex gap-2 mb-4 pb-3 border-b">
+                <Globe className="h-4 w-4 text-indigo-600" />
+                <span className="font-bold text-[10px] uppercase">Macro Sandbox</span>
               </div>
 
               <div className="space-y-4">
-                
                 <div>
                   <div className="flex justify-between text-xs font-bold mb-1.5">
-                    <span className="text-slate-500 dark:text-zinc-400">VIX Fear Index</span>
-                    <span className="font-mono text-indigo-600 dark:text-indigo-400">{vixFearIndex}</span>
+                    <span>VIX Level</span>
+                    <span>{vixFearIndex.toFixed(1)}</span>
                   </div>
-                  <input 
-                    type="range"
-                    min="9"
-                    max="45"
-                    step="0.5"
-                    value={vixFearIndex}
-                    onChange={(e) => setVixFearIndex(parseFloat(e.target.value))}
-                    className="w-full h-1 bg-slate-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                  />
+                  <input type="range" min="9" max="45" step="0.5" value={vixFearIndex} onChange={(e) => setVixFearIndex(parseFloat(e.target.value))} className="w-full" />
                 </div>
 
                 <div>
                   <div className="flex justify-between text-xs font-bold mb-1.5">
-                    <span className="text-slate-500 dark:text-zinc-400">Nasdaq-100 RSI (QQQ)</span>
-                    <span className="font-mono text-indigo-600 dark:text-indigo-400">{nasdaqRsi}</span>
+                    <span>NASDAQ RSI</span>
+                    <span>{nasdaqRsi}</span>
                   </div>
-                  <input 
-                    type="range"
-                    min="20"
-                    max="90"
-                    value={nasdaqRsi}
-                    onChange={(e) => setNasdaqRsi(parseInt(e.target.value))}
-                    className="w-full h-1 bg-slate-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                  />
+                  <input type="range" min="20" max="90" value={nasdaqRsi} onChange={(e) => setNasdaqRsi(parseInt(e.target.value))} className="w-full" />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setSpyAbove50(!spyAbove50)}
-                    className={`py-2 text-[10px] font-black rounded-lg border transition-all ${spyAbove50 ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-600 dark:text-indigo-400' : 'bg-transparent border-slate-300 dark:border-zinc-700 text-slate-600 dark:text-zinc-400'}`}
-                  >
-                    SPY &gt; 50 SMA {spyAbove50 ? 'ON' : 'OFF'}
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setSpyAbove50(!spyAbove50)} className={`py-2 text-[10px] font-bold rounded ${spyAbove50 ? 'bg-indigo-600 text-white' : 'border'}`}>
+                    SPY&gt;50 {spyAbove50 ? 'ON' : 'OFF'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setSpyAbove200(!spyAbove200)}
-                    className={`py-2 text-[10px] font-black rounded-lg border transition-all ${spyAbove200 ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-600 dark:text-indigo-400' : 'bg-transparent border-slate-300 dark:border-zinc-700 text-slate-600 dark:text-zinc-400'}`}
-                  >
-                    SPY &gt; 200 SMA {spyAbove200 ? 'ON' : 'OFF'}
+                  <button onClick={() => setSpyAbove200(!spyAbove200)} className={`py-2 text-[10px] font-bold rounded ${spyAbove200 ? 'bg-indigo-600 text-white' : 'border'}`}>
+                    SPY&gt;200 {spyAbove200 ? 'ON' : 'OFF'}
                   </button>
                 </div>
-
               </div>
             </div>
 
-            <div className={`p-5 rounded-2xl border ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-              <span className="font-extrabold text-[11px] uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block mb-3 border-b pb-2 dark:border-zinc-800 border-slate-100">
-                {tickerList[selectedStock]?.name || "Company Profile"}
-              </span>
+            {/* Profile */}
+            <div className={boxClass}>
+              <p className="font-bold text-[11px] uppercase mb-3 pb-2 border-b text-indigo-600">
+                {tickerList[selectedStock]?.name}
+              </p>
               <div className="grid grid-cols-2 gap-3.5 text-xs">
                 <div>
-                  <p className="text-[9px] text-slate-400 dark:text-zinc-500 uppercase font-bold">Volume</p>
-                  <p className="font-black font-mono text-slate-800 dark:text-zinc-200">{tickerList[selectedStock]?.volume?.toLocaleString() || '750,000'}</p>
+                  <p className="text-[9px] text-slate-500 uppercase">Volume</p>
+                  <p className="font-black">{(tickerList[selectedStock]?.volume || 0).toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-[9px] text-slate-400 dark:text-zinc-500 uppercase font-bold">Avg Volume</p>
-                  <p className="font-black font-mono text-slate-800 dark:text-zinc-200">{tickerList[selectedStock]?.avgVolume?.toLocaleString() || '1,000,000'}</p>
+                  <p className="text-[9px] text-slate-500 uppercase">Avg Vol</p>
+                  <p className="font-black">{(tickerList[selectedStock]?.avgVolume || 0).toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-[9px] text-slate-400 dark:text-zinc-500 uppercase font-bold">52-Week High</p>
-                  <p className="font-black font-mono text-emerald-600 dark:text-emerald-400">${tickerList[selectedStock]?.high52?.toFixed(2)}</p>
+                  <p className="text-[9px] text-slate-500 uppercase">52W High</p>
+                  <p className="font-black text-emerald-600">${tickerList[selectedStock]?.high52.toFixed(2)}</p>
                 </div>
                 <div>
-                  <p className="text-[9px] text-slate-400 dark:text-zinc-500 uppercase font-bold">52-Week Low</p>
-                  <p className="font-black font-mono text-rose-600 dark:text-rose-400">${tickerList[selectedStock]?.low52?.toFixed(2)}</p>
-                </div>
-                <div className="col-span-2 pt-2.5 border-t border-slate-100 dark:border-zinc-800/80">
-                  <p className="text-[10px] font-bold text-slate-500 dark:text-zinc-400 block mb-1">Company Abstract</p>
-                  <p className="text-[10px] text-slate-400 dark:text-zinc-500 leading-relaxed font-semibold">
-                    This asset represents {tickerList[selectedStock]?.name || "a major global equity"}. Live technical and financial calculations are dynamically synthesized from Alpha Vantage real-time market data feeds.
-                  </p>
+                  <p className="text-[9px] text-slate-500 uppercase">52W Low</p>
+                  <p className="font-black text-rose-600">${tickerList[selectedStock]?.low52.toFixed(2)}</p>
                 </div>
               </div>
             </div>
 
-            <div className={`p-5 rounded-2xl border relative overflow-hidden flex flex-col gap-3 ${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-              <div className="absolute -right-16 -bottom-16 h-36 w-36 rounded-full bg-indigo-500/5 blur-2xl pointer-events-none"></div>
-
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800/60 pb-2.5">
+            {/* Chat */}
+            <div className={`${boxClass} relative flex flex-col gap-3`}>
+              <div className="flex justify-between pb-2.5 border-b">
                 <div className="flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                  <span className="font-extrabold text-[10px] uppercase tracking-wider text-slate-500 dark:text-zinc-400">Terminal Companion</span>
+                  <Sparkles className="h-4 w-4 text-indigo-600" />
+                  <span className="font-bold text-[10px] uppercase">Terminal</span>
                 </div>
-                <span className="text-[9px] font-black bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.2 rounded">Alpha Vantage</span>
+                <span className="text-[9px] bg-indigo-100 dark:bg-indigo-900 px-1.5 py-0.2 rounded">Alpha Vantage</span>
               </div>
 
-              <div className="space-y-3 max-h-[180px] overflow-y-auto custom-scrollbar text-[11px] leading-relaxed pr-1 font-semibold text-slate-700 dark:text-zinc-300">
+              <div className="space-y-2 max-h-[160px] overflow-y-auto text-[11px]">
                 {chatMessages.map((msg, i) => (
-                  <div key={i} className={`p-2.5 rounded-xl ${msg.role === 'assistant' ? 'bg-indigo-50/50 dark:bg-zinc-950/80 border border-indigo-100 dark:border-zinc-850' : 'bg-indigo-600 text-white'}`}>
-                    <p className={`font-black text-[9px] uppercase tracking-wider mb-1 ${msg.role === 'assistant' ? 'text-indigo-600' : 'text-indigo-200'}`}>
-                      {msg.role === 'assistant' ? 'Advisor' : 'Dhamija'}
+                  <div key={i} className={`p-2.5 rounded-xl ${msg.role === 'assistant' ? 'bg-indigo-50 dark:bg-zinc-800 border' : 'bg-indigo-600 text-white'}`}>
+                    <p className={`text-[9px] uppercase font-bold mb-1 ${msg.role === 'assistant' ? 'text-indigo-600' : 'text-indigo-200'}`}>
+                      {msg.role === 'assistant' ? 'Advisor' : 'You'}
                     </p>
                     <p>{msg.content}</p>
                   </div>
                 ))}
               </div>
 
-              <form onSubmit={handleChatSubmit} className="flex gap-2 relative z-10">
-                <input
-                  type="text"
-                  placeholder="Inquire about stocks..."
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  className={`w-full p-2 text-xs rounded-xl outline-none border transition-all ${darkMode ? 'bg-zinc-950 border-zinc-850 text-zinc-200 focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-500'}`}
-                />
-                <button type="submit" className="p-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
+              <form onSubmit={handleChatSubmit} className="flex gap-2 mt-2">
+                <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Ask..." className="w-full p-2 rounded-xl border text-xs outline-none" />
+                <button type="submit" className="p-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
                   <Send className="h-3.5 w-3.5" />
                 </button>
               </form>
-
             </div>
-
           </section>
-
         </div>
       </main>
 
-      <footer className={`mt-12 py-8 border-t transition-colors ${darkMode ? 'bg-zinc-950/40 border-zinc-900 text-zinc-500' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-[10px] space-y-2">
-          <p className="font-extrabold uppercase tracking-widest text-slate-500 dark:text-zinc-400">DHAMIJA'S TRADING DASHBOARD</p>
-          <p>
-            This terminal integrates Alpha Vantage API for real-time TSX and NASDAQ data with a 30-second refresh interval. Technical calculations (RSI, Boom Extension, Volume Trends) are computed locally from live market data feeds.
-          </p>
-          <p>© 2026 Dhamija Systems Corp. Powered by Alpha Vantage API & Local Calculation Engines.</p>
-        </div>
+      {/* FOOTER */}
+      <footer className={`mt-12 py-8 border-t text-center text-[10px] ${darkMode ? 'bg-zinc-950/40 text-zinc-500' : 'bg-slate-100 text-slate-400'}`}>
+        <p className="font-bold uppercase">DHAMIJA'S TRADING DASHBOARD</p>
+        <p className="mt-2">Powered by Alpha Vantage API & Local Calculation Engines</p>
+        <p>© 2026 Dhamija Systems Corp.</p>
       </footer>
-
     </div>
   );
 }
